@@ -1,0 +1,17 @@
+# Ignore data and scratch files
+**/data/
+**/out/
+**/testdata/
+**/build/
+.out/
+
+# Compiled binaries and objects
+*.o
+*.a
+*.so
+build/
+run
+
+# Local notes
+AGENT.md
+official-hacathon.md

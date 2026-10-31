@@ -1,0 +1,7 @@
+build/
+out/
+data/
+testdata/
+*.o
+*.a
+*.so
