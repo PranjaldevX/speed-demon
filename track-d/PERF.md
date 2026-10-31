@@ -43,18 +43,32 @@ All measurements below were collected locally on the synthetic benchmark dataset
 - **Change:** In the neighbor relaxation loop, added `__builtin_prefetch` for the next neighbor's `dist` and `epoch_vis` entries (`__builtin_prefetch(&dist[(e + 1)->target])`).
 - **Result:** Hides memory latency when traversing dense node neighborhoods.
 
-### 8. Dial's Bucket Queue with Automatic Fallback
-- **Hypothesis:** When maximum edge weight is small ($W \le 1024$), Dial's algorithm achieves $O(1)$ amortized bucket operations compared to $O(\log V)$ binary heap pushes.
-- **Change:** Evaluated `max_weight` during graph parsing. If $W \le 1024$, queries utilize a circular bucket queue (`BucketQueue`), falling back to `MinHeap` if $W > 1024$.
+### 8. First Live Board Submission & Leaderboard Calibration
+- **Submission:** Container built with PGO, multi-stage GCC 16, pinned digests.
+- **Board Result:** Scored **40.02 points** (Rank #66) on live Falkenstein i5-13500 dedicated scoring box.
+
+### 9. Zero-Allocation Flat Heap & 12 Hardware Threads (HFT Architecture)
+- **Hypothesis:** Dynamic memory allocations in the hot query path incur allocator locks, cache churn, and OS memory management overhead. The scoring machine exposes 6 P-cores with 2 hardware threads each (`--cpuset-cpus=0-11`).
+- **Empirical Profiling:** Profiling revealed that the maximum heap size reached across all 2,000 queries on the real 5M-edge dataset is only 12,674 entries (~200 KB).
+- **Changes:**
+  - Implemented custom `FlatHeap` backed by a flat contiguous array, featuring $O(1)$ reset (`sz = 0`) between queries and zero heap allocations during graph traversal.
+  - Initial capacity set to 32,768 entries (512 KB per thread, comfortably fitting inside CPU L2 cache) with safe dynamic geometric doubling (`realloc`) if ever required.
+  - Pre-allocated all per-thread state (`dist`, `epoch_vis`, `FlatHeap`) in a 64-byte cacheline-aligned `ThreadCtx` pool at program startup.
+  - Scaled worker pool to 12 threads matching the 12 hardware threads of the dedicated Falkenstein i5-13500.
+  - Ultra-tight pointer-based integer parser and direct bulk buffer writer.
+- **Correctness:** Output SHA-256 verified exact match: `a23dbdf0a3e49cc8901310a9ee1dc6a9a569a85297b6da75c2a7002cb2ed277e`.
 
 ---
 
 ## Final Benchmark Comparison
 
-| Metric | Phase 0 Baseline | Fully Optimized (Opt 1–7) | Speedup |
+| Metric | Phase 0 Baseline | Initial Multi-Threaded | Zero-Allocation (12 HT) |
 | :--- | :--- | :--- | :--- |
-| **Wall Clock Time** | **5.072s** | **0.707s** | **7.17x faster** |
-| **Query Scaling** | 1 thread | 6 P-core threads | ~5.3x parallel efficiency |
-| **Output Hash** | Expected | Identical (`diff` matched) | 100% correct |
-| **External Dependencies** | 0 | 0 | $D = 1.0$ (no penalty) |
+| **Board Score** | — | 40.02 pts (#66) | In submission |
+| **Hot-Path Allocations** | High (`std::priority_queue`) | High | **0 (Zero-allocation)** |
+| **Worker Threads** | 1 | 6 | 12 (6 P-cores × 2 HT) |
+| **Heap Memory / Thread** | Dynamic | Dynamic | 512 KB (L2-resident) |
+| **Output Hash** | Expected | Identical | `a23dbdf0...ed277e` |
+| **External Dependencies** | 0 | 0 | 0 ($D = 1.0$) |
+
 
